@@ -220,6 +220,10 @@ in
       pkgs.jq
       pkgs.coreutils
       pkgs.systemd
+      # The vault CLI resolves its token-helper config path through the
+      # home directory, and falls back to getent when $HOME is unset,
+      # as it is in a systemd unit without User=.
+      pkgs.getent
     ];
     runtimeEnv = {
       VAULT_ADDR = "http://127.0.0.1:8200";
