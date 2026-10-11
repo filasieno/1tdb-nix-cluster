@@ -1,9 +1,14 @@
 keys:
+  # Host key: /var/lib/sops-nix/key.txt on durin (sops-nix decrypts at boot).
   - &durin age1t85crusxv5exf3kt8guxfzplmdqjkt47srehfam7zc95tmz3mvjscurg2g
-# One age recipient today (durin). Add a new node's recipient to this
-# key group before creating that node's secrets file.
+  # Admin key: derived from ~/.ssh/ffilasieno with ssh-to-age.
+  # Private half lives in ~/.config/sops/age/keys.txt on Fabio's Mac.
+  - &fabio age10q7eeludqye20amcjx9c63haldk3x2mtqc2q7wdu566qlcy0tsmq8h8psf
+# Add a new node's recipient to its own rule before creating its secrets
+# file. After editing recipients run: sops updatekeys <file>
 creation_rules:
-  - path_regex: shared/secrets/.*\.ya?ml$
+  - path_regex: nodes/durin/secrets/secrets\.yaml
     key_groups:
       - age:
           - *durin
+          - *fabio
