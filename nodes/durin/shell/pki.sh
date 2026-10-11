@@ -6,7 +6,9 @@ cluster=$KUBERNETES_CLUSTER_NAME
 service_ip=$KUBERNETES_SERVICE_IP
 lan_ip=$KUBERNETES_LAN_ADDRESS
 
-install -d -m 0750 -o root -g kubernetes "$dir"
+# 0751: etcd is not in group kubernetes but must traverse the directory to
+# open its own certificate pair; every file carries its own mode.
+install -d -m 0751 -o root -g kubernetes "$dir"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 

@@ -9,7 +9,9 @@ in
 {
   systemd.tmpfiles.rules = [
     "d /var/lib/kubernetes 0755 kubernetes kubernetes -"
-    "d ${cluster.secrets} 0750 root kubernetes -"
+    # 0751: etcd is not in group kubernetes but must traverse the directory
+    # to open its own certificate pair, which carries its own modes.
+    "d ${cluster.secrets} 0751 root kubernetes -"
   ];
 
   systemd.services.kubernetes-pki = {
