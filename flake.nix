@@ -8,15 +8,10 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    sops-nix = {
-      url = "github:Mic92/sops-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     durin = {
       url = "path:nodes/durin";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.disko.follows = "disko";
-      inputs.sops-nix.follows = "sops-nix";
     };
   };
 

@@ -1,20 +1,19 @@
 # Unit order on this single control+worker node:
 #
-# sops-install-secrets
-#   -> kubernetes-pki
-#        -> etcd -> etcd-snapshot.timer
-#        -> kube-apiserver
-#             -> kube-controller-manager
-#             -> kube-scheduler
-#             -> kube-addon-manager
-#             -> kubernetes-csr-rbac -> kubelet-serving-csr-approve.timer
-#        -> kubelet (also after containerd)
-#             -> cilium-install
+# kubernetes-pki
+#   -> etcd -> etcd-snapshot.timer
+#   -> kube-apiserver
+#        -> kube-controller-manager
+#        -> kube-scheduler
+#        -> kube-addon-manager
+#        -> kubernetes-csr-rbac -> kubelet-serving-csr-approve.timer
+#   -> kubelet (also after containerd)
+#        -> cilium-install
 # Cilium replaces kube-proxy. Istio is installed later by Flux.
-#   -> vault-tls -> vault (after network-online) -> vault-init
+# vault-tls -> vault (after network-online, TPM-sealed Azure secret) -> vault-init
 #
 # containerd starts before kubelet and does not wait on the API.
-{ self, lib, pkgs, ... }:
+{ lib, pkgs, ... }:
 let
   admins = import ./admins.nix;
   commands = import ./commands.nix { inherit pkgs lib; };
@@ -45,11 +44,6 @@ in
   nix.settings.experimental-features = [ "nix-command" ];
 
   nixpkgs.config.allowUnfreePredicate = pkg: lib.getName pkg == "vault";
-
-  sops.defaultSopsFormat = "yaml";
-  sops.age.keyFile = "/var/lib/sops-nix/key.txt";
-  sops.age.sshKeyPaths = [ ];
-  sops.defaultSopsFile = self + "/secrets/secrets.yaml";
 
   # Open ports only on the I210 named lan1. Other interfaces, including
   # LAN2 and the BMC USB gadget, stay closed. Loopback is allowed by the

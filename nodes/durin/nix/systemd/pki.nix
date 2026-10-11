@@ -18,9 +18,7 @@ in
     after = [
       "systemd-sysusers.service"
       "systemd-tmpfiles-setup.service"
-      "sops-install-secrets.service"
     ];
-    wants = [ "sops-install-secrets.service" ];
     before = [
       "etcd.service"
       "kube-apiserver.service"

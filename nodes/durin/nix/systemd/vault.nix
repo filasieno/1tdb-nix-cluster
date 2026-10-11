@@ -34,20 +34,25 @@ let
       key_name = "${azure.keyName}"
     }
   '';
-  # Read the sops files at start and drop a trailing newline. An
-  # EnvironmentFile that inlines the secret keeps that newline inside the
-  # quotes, systemd rejects the file, and Vault never receives the Azure
-  # credentials it needs to unwrap the seal.
+  # The client secret arrives through systemd's credential mechanism:
+  # LoadCredentialEncrypted below hands the TPM-sealed file to systemd,
+  # which unseals it and exposes the clear text under $CREDENTIALS_DIRECTORY,
+  # readable by the vault user only. Trailing newlines are dropped so the
+  # value Azure sees is exactly the secret.
+  sealed = builtins.pathExists azure.credentialFile;
   vaultServer = pkgs.writeShellScript "vault-server" ''
     set -euo pipefail
-    read_secret() {
-      ${pkgs.coreutils}/bin/tr -d '\r\n' < "$1"
-    }
-    export AZURE_TENANT_ID="$(read_secret "${config.sops.secrets.azure-tenant-id.path}")"
-    export AZURE_CLIENT_ID="$(read_secret "${config.sops.secrets.azure-client-id.path}")"
-    export AZURE_CLIENT_SECRET="$(read_secret "${config.sops.secrets.azure-client-secret.path}")"
-    if [[ -z $AZURE_TENANT_ID || -z $AZURE_CLIENT_ID || -z $AZURE_CLIENT_SECRET ]]; then
-      echo "Azure seal credentials are empty" >&2
+    cred="''${CREDENTIALS_DIRECTORY:-/nonexistent}/${azure.credentialName}"
+    if [[ ! -r $cred ]]; then
+      echo "no Azure client secret: seal it with 'sudo vault-seal-credential', commit secrets/${azure.credentialName}.cred, and switch" >&2
+      exit 1
+    fi
+    export AZURE_TENANT_ID="${azure.tenantId}"
+    export AZURE_CLIENT_ID="${azure.clientId}"
+    AZURE_CLIENT_SECRET="$(${pkgs.coreutils}/bin/tr -d '\r\n' < "$cred")"
+    export AZURE_CLIENT_SECRET
+    if [[ -z $AZURE_CLIENT_SECRET ]]; then
+      echo "Azure client secret is empty" >&2
       exit 1
     fi
     exec ${pkgs.vault}/bin/vault server -config ${configFile}
@@ -59,27 +64,14 @@ in
     "d /var/lib/vault/tls 0750 vault vault -"
   ];
 
-  sops.secrets.azure-tenant-id = {
-    key = azure.tenantIdKey;
-    owner = "vault";
-    group = "vault";
-    mode = "0400";
-    restartUnits = [ "vault.service" ];
-  };
-  sops.secrets.azure-client-id = {
-    key = azure.clientIdKey;
-    owner = "vault";
-    group = "vault";
-    mode = "0400";
-    restartUnits = [ "vault.service" ];
-  };
-  sops.secrets.azure-client-secret = {
-    key = azure.clientSecretKey;
-    owner = "vault";
-    group = "vault";
-    mode = "0400";
-    restartUnits = [ "vault.service" ];
-  };
+  environment.systemPackages = [ commands.vaultSealCredential ];
+
+  warnings = lib.optional (!sealed) ''
+    durin: secrets/${azure.credentialName}.cred is absent. The system builds and boots,
+    vault.service fails until the secret is sealed on durin's TPM and committed:
+      sops -d --extract '["azure_client_secret"]' nodes/durin/secrets/secrets.yaml \
+        | ssh durin sudo vault-seal-credential > nodes/durin/secrets/${azure.credentialName}.cred
+  '';
 
   systemd.services.vault-tls = {
     description = "Vault listener certificate";
@@ -88,9 +80,7 @@ in
     after = [
       "systemd-sysusers.service"
       "systemd-tmpfiles-setup.service"
-      "sops-install-secrets.service"
     ];
-    wants = [ "sops-install-secrets.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -103,12 +93,10 @@ in
     wantedBy = [ "multi-user.target" ];
     requires = [
       "vault-tls.service"
-      "sops-install-secrets.service"
       "lan1-ready.service"
     ];
     after = [
       "vault-tls.service"
-      "sops-install-secrets.service"
       "network-online.target"
       "lan1-ready.service"
     ];
@@ -116,6 +104,9 @@ in
     serviceConfig = {
       User = "vault";
       Group = "vault";
+      # Sealed with --with-key=tpm2 and no PCR policy, so it survives
+      # firmware and kernel updates and any reinstall on this board.
+      LoadCredentialEncrypted = lib.mkIf sealed "${azure.credentialName}:${azure.credentialFile}";
       ExecStart = vaultServer;
       StateDirectory = "vault";
       StateDirectoryMode = "0700";

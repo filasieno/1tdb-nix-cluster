@@ -8,10 +8,6 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    sops-nix = {
-      url = "github:Mic92/sops-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
@@ -19,7 +15,6 @@
       self,
       nixpkgs,
       disko,
-      sops-nix,
     }:
     {
       nixosConfigurations.durin = nixpkgs.lib.nixosSystem {
@@ -31,7 +26,6 @@
           ./nix/disko.nix
           ./nix/hardware.nix
           ./nix/default.nix
-          sops-nix.nixosModules.sops
         ];
       };
     };

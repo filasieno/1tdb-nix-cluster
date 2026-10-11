@@ -103,9 +103,26 @@ In a datacenter, change the HTTP and HTTPS ports to 80 and 443, open those ports
 
 ## Vault
 
-Vault Community auto-unseals with the Azure Key Vault seal named in `nix/azure.nix`. The process reads the three sops files at start and strips trailing newlines. The local listener is `127.0.0.1:8200` without TLS. The network listener is `192.168.1.230:8201` with TLS.
+Vault Community auto-unseals with the Azure Key Vault seal named in `nix/azure.nix`. The local listener is `127.0.0.1:8200` without TLS. The network listener is `192.168.1.230:8201` with TLS.
 
 The listener certificate includes `durin`, localhost, `127.0.0.1`, `192.168.1.230`, and `k3s.1tdb.io`. `vault-tls` reissues it when that list changes. `vault-init` returns only when Vault is unsealed. If it is still sealed, the unit restarts `vault.service` once and waits again. Recovery is one share, age-encrypted so both admins can read it.
+
+### The one secret, sealed to the TPM
+
+Tenant id, client id, vault name, and key name are identifiers and sit in `nix/azure.nix`. The client secret is the only value that must stay private, and it is the only thing Vault needs that the flake cannot state in clear. It is stored in `secrets/azure-client-secret.cred`, a systemd encrypted credential sealed to durin's TPM 2.0. Only that chip can open it, which is what makes a public repo safe to hold it. At start, `LoadCredentialEncrypted=` in `vault.service` has systemd unseal it into `$CREDENTIALS_DIRECTORY`, readable by the `vault` user alone, and the wrapper exports it as `AZURE_CLIENT_SECRET`. Nothing is copied onto the host outside the flake; a reinstall needs no extra files.
+
+Two sealing choices matter. `--with-key=tpm2` alone, because the default also mixes in `/var/lib/systemd/credential.secret`, a per-install host key that a reinstall would regenerate. An empty PCR list, so a firmware or kernel update cannot lock Vault out; the trade is that any OS booted on this board can ask the TPM to unseal it, the same exposure as root on the host. PCR 7 binding is a later step once Secure Boot is on.
+
+Sealing happens on durin, once, and after that only when the secret rotates or the TPM is cleared. The clear text for re-sealing lives in `secrets/secrets.yaml`, sops-encrypted to the admin age key:
+
+```sh
+sops -d --extract '["azure_client_secret"]' nodes/durin/secrets/secrets.yaml \
+  | ssh durin sudo vault-seal-credential > nodes/durin/secrets/azure-client-secret.cred
+git add nodes/durin/secrets/azure-client-secret.cred && git commit -m "feat(durin): seal the Azure client secret" && git push
+ssh durin sudo nixos-rebuild switch --flake github:filasieno/1tdb-nix-cluster#durin
+```
+
+`vault-seal-credential` refuses to run without a usable TPM (`systemd-creds has-tpm2`) and verifies the round trip through the chip before printing. Until the file exists the flake evaluates with a warning, the system boots, sshd and Kubernetes come up, and only `vault.service` fails with a message pointing here. A TPM clear or a board swap means running the three lines again.
 
 ### Azure side of the seal
 
@@ -115,42 +132,44 @@ Verified 2026-10-11. Key Vault `BootstrapKeys` (resource group `durin-keys`) is 
 az ad app credential delete --id f4619c34-21da-4a3a-b667-524e6ded923a --key-id 8f853aa0-384e-4b49-8f54-abbb7fc4f5c7
 ```
 
-To rotate the secret again:
+To rotate the secret again, update the admin copy, then re-seal with the three lines above:
 
 ```sh
 NEW=$(az ad app credential reset --id f4619c34-21da-4a3a-b667-524e6ded923a --append --years 2 --display-name durin-vault-unseal-$(date +%Y-%m) --query password -o tsv)
-sops set secrets/secrets.yaml '["azure_client_secret"]' "\"$NEW\""
+sops set nodes/durin/secrets/secrets.yaml '["azure_client_secret"]' "\"$NEW\""
 ```
-
-Then deploy; `vault.service` picks the value up on its next start.
 
 ### Who can read `secrets/secrets.yaml`
 
-Two age recipients, listed in the repo root `.sops.yaml`: durin's host key (`/var/lib/sops-nix/key.txt`) and Fabio's admin key, derived from `~/.ssh/ffilasieno` with `ssh-to-age` and stored in `~/Library/Application Support/sops/age/keys.txt` on the Mac (`~/.config/sops/age/keys.txt` is a symlink to it). After adding or removing a recipient run `sops updatekeys secrets/secrets.yaml` with an identity that can already open the file.
+One age recipient, listed in the repo root `.sops.yaml`: Fabio's admin key, derived from `~/.ssh/ffilasieno` with `ssh-to-age` and stored in `~/Library/Application Support/sops/age/keys.txt` on the Mac (`~/.config/sops/age/keys.txt` is a symlink to it). The host has no age key. After adding or removing a recipient run `sops updatekeys nodes/durin/secrets/secrets.yaml` with an identity that can already open the file.
 
 ## Disk
 
 The mirrored PM893 pair is the root pool. The Optane pool is the etcd WAL. The 990 PRO holds `/data` and `data/containerd`, mounted at `/var/lib/containerd`. On a pool created before that dataset existed, `containerd-dataset.service` creates it before the mount. On a host that already ran containerd from the SATA mirror, the zfs snapshotter left `rpool/var/<id>` datasets with mountpoints under the old path. Destroy those before the first boot with this layout, or they mount over the new dataset.
 
-## Installing with nixos-anywhere
+## Installing
 
-The target is the running durin, reached as `fabio@192.168.1.230` on port 2222 with passwordless sudo. The run wipes the four disks named in `nix/disko.nix`: the two PM893, the Optane, and the 990 PRO. Everything on them is gone, including the current Vault and etcd.
+Both routes wipe the four disks named in `nix/disko.nix`: the two PM893, the Optane, and the 990 PRO. Everything on them is gone, including the current Vault and etcd. Commit and push first: Nix copies only tracked files, and the console route fetches from GitHub. Passwords are locked for every account, so the BMC console is a view of the installed system, never a login into it; if `lan1-ready` fails on first boot, sshd does not start, and the way back in is the installer again.
 
-Before the run:
+### From the installer console
 
-1. Commit. Nix copies only tracked files, so an untracked `api-domain.nix` or `azure.nix` is absent from the evaluation.
-2. Copy the sops age key into the new system. It is `/var/lib/sops-nix/key.txt` on durin, and it decrypts `secrets/secrets.yaml`. Without it `sops-install-secrets` fails and Vault never starts.
+The repo is public, so the flake is fetched straight from GitHub. The installer's network comes up with DHCP on both I210 ports; the static address is set by hand so the result is the one the NAT gateway forwards to:
 
-   ```sh
-   mkdir -p extra/var/lib/sops-nix
-   ssh durin sudo cat /var/lib/sops-nix/key.txt > extra/var/lib/sops-nix/key.txt
-   chmod 0600 extra/var/lib/sops-nix/key.txt
-   ```
+```sh
+ip link set eno1 up
+ip addr add 192.168.1.230/24 dev eno1
+ip route add default via 192.168.1.254
+echo "nameserver 192.168.1.254" > /etc/resolv.conf
 
-3. Save what the wipe destroys and you still want: `/var/lib/vault/init-secrets.json` holds the old root token and recovery keys in clear text, and `/var/lib/etcd` is the old cluster state.
-4. Have the BMC console ready. Passwords are locked for every account, so that console is a view, not a login. If `lan1-ready` fails on first boot, sshd does not start, and the way back in is another nixos-anywhere run.
+nixos-install --no-root-passwd --flake github:filasieno/1tdb-nix-cluster#durin
+reboot
+```
 
-Run it from a machine that has Nix. This Mac does not, so install Nix first. The build cannot happen on macOS for an x86_64-linux system, so the closure is built on durin inside the installer:
+`--no-root-passwd` skips the password prompt. A password typed there is discarded anyway: `users.mutableUsers = false` rewrites `/etc/shadow` from the configuration at every activation and every account stays locked. The first boot mints new SSH host keys, so expect a `known_hosts` change on the next `ssh durin`.
+
+### With nixos-anywhere
+
+From a machine with Nix (this Mac has it at `/nix`; `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh` puts it on PATH). The build cannot happen on macOS for an x86_64-linux system, so the closure is built on durin inside the installer:
 
 ```sh
 nix run github:nix-community/nixos-anywhere -- \
@@ -158,13 +177,14 @@ nix run github:nix-community/nixos-anywhere -- \
   --build-on remote \
   --target-host fabio@192.168.1.230 \
   --ssh-port 2222 \
-  --extra-files ./extra \
   --copy-host-keys
 ```
 
-After kexec the installer listens on port 22, which is nixos-anywhere's default for that phase. `--copy-host-keys` keeps the SSH host keys, so `known_hosts` stays valid. nixos-anywhere exports the ZFS pools before reboot, so the `4e8025bc` host id imports them on first boot.
+After kexec the installer listens on port 22, which is nixos-anywhere's default for that phase. `--copy-host-keys` keeps the SSH host keys. nixos-anywhere exports the ZFS pools before reboot, so the `4e8025bc` host id imports them on first boot. On 2026-10-11 the kexec image came up without an address on `eno1`; the fix was the four `ip` lines above typed on the console, after which nixos-anywhere connected on its own.
 
-First boot: `kubernetes-pki` mints a new CA, `vault-init` initializes Vault against the same Azure key and writes `recovery.age`, and `cilium-install` installs the chart. Flux and Istio come after that.
+### First boot
+
+`kubernetes-pki` mints a new CA, `cilium-install` installs the chart, sshd answers on 2222 for the admin keys in `nix/admins.nix`. If `secrets/azure-client-secret.cred` is in the flake, `vault-init` initializes Vault against the Azure key and writes `recovery.age`; if it is absent, seal it as described under Vault and switch. Flux and Istio come after that.
 
 ## Still outside this repo
 

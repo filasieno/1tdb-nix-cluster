@@ -228,6 +228,16 @@ in
     text = builtins.readFile (shell + "/vault-init.sh");
   };
 
+  vaultSealCredential = pkgs.writeShellApplication {
+    name = "vault-seal-credential";
+    runtimeInputs = [
+      pkgs.systemd
+      pkgs.coreutils
+    ];
+    runtimeEnv.VAULT_CREDENTIAL_NAME = (import ./azure.nix).credentialName;
+    text = builtins.readFile (shell + "/vault-seal-credential.sh");
+  };
+
   etcdPrepare = pkgs.writeShellScript "etcd-prepare" ''
     install -d -m 0700 -o etcd -g etcd /var/lib/etcd ${cluster.walDirectory}
   '';
