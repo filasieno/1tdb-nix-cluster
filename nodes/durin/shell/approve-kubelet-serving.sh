@@ -16,7 +16,7 @@
 #
 # Environment, set by the Nix wrapper:
 #   KUBELET_SERVING_APPROVER    1 only on cluster.bootstrap
-#   KUBELET_SERVING_WORKERS     JSON object of worker hostname to address
+#   KUBELET_SERVING_WORKERS_FILE  JSON file: worker hostname to address
 #   KUBECONFIG                  cluster-admin kubeconfig
 #   ETCDCTL_ENDPOINTS, ETCDCTL_CACERT, ETCDCTL_CERT, ETCDCTL_KEY
 #
@@ -85,7 +85,7 @@ while IFS= read -r item; do
   fi
   node=${cn#"$prefix"}
 
-  if ! addr=$(jq -er --arg n "$node" '.[$n] // empty' <<<"$KUBELET_SERVING_WORKERS"); then
+  if ! addr=$(jq -er --arg n "$node" '.[$n] // empty' "$KUBELET_SERVING_WORKERS_FILE"); then
     echo "kubelet-serving-csr: not approving ${csr_name}: ${node} is not a worker in cluster.members" >&2
     continue
   fi

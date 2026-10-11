@@ -162,9 +162,12 @@ in
     ];
     runtimeEnv = {
       KUBELET_SERVING_APPROVER = "1";
-      KUBELET_SERVING_WORKERS = builtins.toJSON {
-        ${cluster.host} = cluster.lan.address;
-      };
+      # A file rather than an inline JSON string: writeShellApplication
+      # exports runtimeEnv as single-quoted literals, and shellcheck rejects
+      # quotes inside them (SC2089/SC2090).
+      KUBELET_SERVING_WORKERS_FILE = pkgs.writeText "kubelet-serving-workers.json" (
+        builtins.toJSON { ${cluster.host} = cluster.lan.address; }
+      );
       KUBECONFIG = clusterAdminKubeconfig;
       ETCDCTL_ENDPOINTS = cluster.etcdClient;
       ETCDCTL_CACERT = cluster.cert "ca";
