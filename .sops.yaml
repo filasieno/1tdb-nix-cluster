@@ -1,0 +1,9 @@
+keys:
+  - &durin age1t85crusxv5exf3kt8guxfzplmdqjkt47srehfam7zc95tmz3mvjscurg2g
+# One age recipient today (durin). Add a new node's recipient to this
+# key group before creating that node's secrets file.
+creation_rules:
+  - path_regex: shared/secrets/.*\.ya?ml$
+    key_groups:
+      - age:
+          - *durin
