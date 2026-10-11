@@ -162,8 +162,12 @@ ip route add default via 192.168.1.254
 echo "nameserver 192.168.1.254" > /etc/resolv.conf
 
 nixos-install --no-root-passwd --flake github:filasieno/1tdb-nix-cluster#durin
+umount -R /mnt
+zpool export -a
 reboot
 ```
+
+`zpool export -a` is required. The pools were created by the installer under its own random hostid; an exported pool imports anywhere, an unexported one is "potentially active on another system" and the initrd, which runs with `boot.zfs.forceImportRoot = false`, refuses it and drops to an emergency shell that the locked root account cannot open. If that happened anyway, press `e` on the GRUB entry, append `zfs_force=1` to the `linux` line, and boot with Ctrl-x; the forced import writes durin's hostid `4e8025bc` into the pools and later boots are clean. nixos-anywhere exports on its own.
 
 `--no-root-passwd` skips the password prompt. A password typed there is discarded anyway: `users.mutableUsers = false` rewrites `/etc/shadow` from the configuration at every activation and every account stays locked. The first boot mints new SSH host keys, so expect a `known_hosts` change on the next `ssh durin`.
 
