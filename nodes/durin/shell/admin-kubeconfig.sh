@@ -7,7 +7,7 @@
 # create a cluster. Nothing happens until /var/lib/kubernetes/secrets/ca.pem
 # exists.
 #
-# For fabio and roberto, an existing ~/.kube/<user>-admin.crt and .key stay
+# For fabio and roby, an existing ~/.kube/<user>-admin.crt and .key stay
 # the kubeconfig identity. Otherwise the shared cluster-admin certificate
 # is copied into that home. A user with neither pair is skipped.
 #
@@ -23,7 +23,7 @@
 
 src=/var/lib/kubernetes/secrets
 if [[ -s "$src/ca.pem" ]]; then
-  for user in fabio roberto; do
+  for user in fabio roby; do
     if ! id "$user" >/dev/null 2>&1; then
       continue
     fi

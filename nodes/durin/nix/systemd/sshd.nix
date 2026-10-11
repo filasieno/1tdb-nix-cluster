@@ -39,7 +39,7 @@ in
     description = "SSH privilege separation user";
   };
 
-  environment.etc = authorizedKeys "fabio" // authorizedKeys "roberto";
+  environment.etc = authorizedKeys "fabio" // authorizedKeys "roby";
 
   systemd.tmpfiles.rules = [
     "d /var/empty 0755 root root -"
