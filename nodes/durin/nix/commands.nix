@@ -105,6 +105,10 @@ let
       healthzBindAddress = "127.0.0.1";
       clusterDomain = "cluster.local";
       clusterDNS = [ cluster.clusterDns ];
+      # The host /etc/resolv.conf is the systemd-resolved stub (127.0.0.53).
+      # Handing that to pods makes CoreDNS forward to itself and crash on
+      # the loop check; give pods the real upstream list instead.
+      resolvConf = "/run/systemd/resolve/resolv.conf";
       tlsCertFile = cluster.cert "kubelet";
       tlsPrivateKeyFile = cluster.key "kubelet";
     }
