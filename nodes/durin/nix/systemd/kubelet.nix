@@ -1,4 +1,5 @@
 {
+  config,
   lib,
   pkgs,
   commands,
@@ -40,6 +41,10 @@
       pkgs.ethtool
       pkgs.socat
       pkgs.util-linux
+      # cAdvisor shells out to the zfs tools to stat the root filesystem
+      # (rpool/var); without them the kubelet fails with "cannot find
+      # filesystem info for device rpool/var".
+      config.boot.zfs.package
     ];
     serviceConfig = {
       Delegate = "yes";
