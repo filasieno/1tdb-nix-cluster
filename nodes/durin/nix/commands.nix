@@ -246,11 +246,17 @@ in
     install -d -m 0700 -o etcd -g etcd /var/lib/etcd ${cluster.walDirectory}
   '';
 
-  # A member directory means this node has already joined. Forcing "new" on
-  # every start makes etcd refuse to come back after the first boot.
+  # WAL files mean this node has already joined; forcing "new" then makes
+  # etcd refuse to come back after the first boot. The member directory is
+  # not that signal: a crashed first bootstrap leaves member/snap/db behind
+  # with no WAL, and "existing" would then try to join a cluster that never
+  # formed. This mirrors etcd's own member-initialized check (wal.Exist on
+  # the dedicated WAL dir).
   etcdStart = pkgs.writeShellScript "etcd-start" ''
     set -euo pipefail
-    if [[ -d /var/lib/etcd/member ]]; then
+    shopt -s nullglob
+    wals=(${cluster.walDirectory}/*.wal)
+    if (( ''${#wals[@]} > 0 )); then
       export ETCD_INITIAL_CLUSTER_STATE=existing
     else
       export ETCD_INITIAL_CLUSTER_STATE=new
