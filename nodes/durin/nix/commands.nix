@@ -242,8 +242,10 @@ in
     text = builtins.readFile (shell + "/vault-seal-credential.sh");
   };
 
+  # The WAL pool mountpoint itself must belong to etcd: the WAL is first
+  # written as <walDirectory>.tmp in the parent and renamed into place.
   etcdPrepare = pkgs.writeShellScript "etcd-prepare" ''
-    install -d -m 0700 -o etcd -g etcd /var/lib/etcd ${cluster.walDirectory}
+    install -d -m 0700 -o etcd -g etcd /var/lib/etcd ${cluster.walMount} ${cluster.walDirectory}
   '';
 
   # WAL files mean this node has already joined; forcing "new" then makes
