@@ -77,6 +77,16 @@ let
         builtins.toJSON (userBinding "kube-addon-manager" "cluster-admin" "system:kube-addon-manager")
       );
     }
+    {
+      # The kubelet authorizes by Webhook, so the apiserver's client
+      # identity needs nodes/proxy and friends for kubectl logs and exec.
+      name = "kube-apiserver-kubelet-client.json";
+      path = pkgs.writeText "kube-apiserver-kubelet-client.json" (
+        builtins.toJSON (
+          userBinding "kube-apiserver-kubelet-client" "system:kubelet-api-admin" "kube-apiserver-kubelet-client"
+        )
+      );
+    }
   ];
   adminKubeconfig = import ../kubeconfig.nix {
     inherit pkgs;
