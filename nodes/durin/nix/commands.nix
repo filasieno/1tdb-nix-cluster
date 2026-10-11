@@ -279,6 +279,7 @@ in
       --tls-cert-file=${cluster.cert "kube-apiserver"} \
       --tls-private-key-file=${cluster.key "kube-apiserver"} \
       --kubelet-certificate-authority=${cluster.cert "ca"} \
+      --kubelet-preferred-address-types=InternalIP,Hostname \
       --kubelet-client-certificate=${cluster.cert "kube-apiserver-kubelet-client"} \
       --kubelet-client-key=${cluster.key "kube-apiserver-kubelet-client"} \
       --proxy-client-cert-file=${cluster.cert "kube-apiserver-proxy-client"} \
