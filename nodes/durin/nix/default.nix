@@ -60,6 +60,17 @@ in
     allowedUDPPorts = natPorts "udp" ++ [ 8472 ];
   };
 
+  # Pod traffic enters the host through the Cilium datapath devices, not
+  # lan1: a pod reaching the apiserver ClusterIP is BPF-translated to
+  # 192.168.1.230:6443 and would otherwise hit the default drop. Cilium
+  # network policy governs that path; the host firewall trusts it.
+  networking.firewall.trustedInterfaces = [
+    "cilium_host"
+    "cilium_net"
+    "cilium_vxlan"
+    "lxc+"
+  ];
+
   users.groups.etcd = { };
   users.users.etcd = {
     isSystemUser = true;
