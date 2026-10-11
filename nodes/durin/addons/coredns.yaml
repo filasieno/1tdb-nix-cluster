@@ -91,6 +91,10 @@ spec:
     spec:
       serviceAccountName: coredns
       priorityClassName: system-cluster-critical
+      # Default, not ClusterFirst: CoreDNS must inherit the node's upstream
+      # resolvers. ClusterFirst would point its own "forward . /etc/resolv.conf"
+      # at the kube-dns service, a loop the loop plugin kills on start.
+      dnsPolicy: Default
       tolerations:
         - key: CriticalAddonsOnly
           operator: Exists
