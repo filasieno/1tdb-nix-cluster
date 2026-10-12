@@ -240,8 +240,39 @@ in
     runtimeEnv = {
       VAULT_ADDR = "http://127.0.0.1:8200";
       VAULT_RECOVERY_RECIPIENTS = lib.concatStringsSep "\n" cluster.recoveryRecipients;
+      VAULT_ROOT_TOKEN_FILE = "/var/lib/vault-bootstrap/root.token";
     };
     text = builtins.readFile (shell + "/vault-init.sh");
+  };
+
+  vaultPlatformAdmin = pkgs.writeShellApplication {
+    name = "vault-platform-admin";
+    runtimeInputs = [
+      pkgs.vault
+      pkgs.kubectl
+      pkgs.jq
+      pkgs.etcd
+      pkgs.coreutils
+      pkgs.getent
+    ];
+    runtimeEnv = {
+      VAULT_ADDR = "http://127.0.0.1:8200";
+      KUBECONFIG = clusterAdminKubeconfig;
+      VAULT_KUBERNETES_HOST = "https://127.0.0.1:6443";
+      VAULT_KUBERNETES_CA = cluster.cert "ca";
+      VAULT_KUBERNETES_ISSUER = "https://kubernetes.default.svc";
+      VAULT_PLATFORM_NAMESPACE = "vault-platform-admin";
+      VAULT_PLATFORM_SERVICE_ACCOUNT = "vault-platform-admin-sa";
+      VAULT_PLATFORM_TOKEN_SECRET = "vault-platform-admin-sa-token";
+      VAULT_PLATFORM_ROLE = "vault-platform-admin";
+      VAULT_PLATFORM_POLICY = "vault-platform-admin";
+      VAULT_ROOT_TOKEN_FILE = "/var/lib/vault-bootstrap/root.token";
+      ETCDCTL_ENDPOINTS = cluster.etcdClient;
+      ETCDCTL_CACERT = cluster.cert "ca";
+      ETCDCTL_CERT = cluster.cert "kube-apiserver-etcd-client";
+      ETCDCTL_KEY = cluster.key "kube-apiserver-etcd-client";
+    };
+    text = builtins.readFile (shell + "/vault-platform-admin.sh");
   };
 
   vaultSealCredential = pkgs.writeShellApplication {

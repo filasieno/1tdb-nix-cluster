@@ -11,6 +11,9 @@
 #        -> cilium-install
 # Cilium replaces kube-proxy. Istio is installed later by Flux.
 # vault-tls -> vault (after network-online, TPM-sealed Azure secret) -> vault-init
+#   -> vault-platform-admin (after the API; retries until Flux has created
+#      vault-platform-admin-sa, then grants it cluster-admin and enables
+#      Vault kubernetes auth)
 #
 # containerd starts before kubelet and does not wait on the API.
 { lib, pkgs, ... }:
@@ -38,6 +41,7 @@ in
     ./systemd/csr.nix
     ./systemd/cilium.nix
     ./systemd/vault.nix
+    ./systemd/vault-platform-admin.nix
   ];
 
   networking.hostName = "durin";
