@@ -57,6 +57,14 @@ let
       enabled: false
     envoyConfig:
       enabled: false
+    # Hubble's server is already on (chart default). Relay and UI are not, and
+    # their mTLS material is minted by this Helm release. cilium-install owns
+    # the release and re-applies these values, so Flux cannot add them.
+    hubble:
+      relay:
+        enabled: true
+      ui:
+        enabled: true
   '';
 
   controllerKubeconfig = kubeconfig {
