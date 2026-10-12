@@ -60,6 +60,8 @@ in
     pkgs.k9s
     pkgs.stern
     pkgs.kubectx
+    pkgs.kyverno # kyverno CLI
+    pkgs.fluxcd # flux CLI only; GitOps bootstrap is separate
     pkgs.crane # go-containerregistry
     pkgs.etcd # etcdctl, etcdutl
     pkgs.cfssl
