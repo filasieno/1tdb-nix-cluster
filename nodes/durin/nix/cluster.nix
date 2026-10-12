@@ -27,6 +27,9 @@ rec {
   # Ports the upstream NAT gateway forwards to this host.
   # sshd, the apiserver, and the host firewall all read this set.
   # Change a number here; do not duplicate it in a unit.
+  # Entries with a nodePort are bridged to the Istio ingress by
+  # systemd/ingress-forward.nix. The NodePort numbers are fixed in the
+  # 1tdb-cluster repo, infrastructure/istio/gateway/helmrelease.yaml.
   natGateway = {
     apiserver = {
       port = 6443;
@@ -35,10 +38,12 @@ rec {
     http = {
       port = 8080;
       protocol = "tcp";
+      nodePort = 30080;
     };
     https = {
       port = 7443;
       protocol = "tcp";
+      nodePort = 30443;
     };
     telepresence = {
       port = 7778;

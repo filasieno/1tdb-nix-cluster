@@ -26,6 +26,7 @@ in
   imports = [
     admins.module
     ./systemd/sshd.nix
+    ./systemd/ingress-forward.nix
     ./systemd/pki.nix
     ./systemd/etcd.nix
     ./systemd/containerd.nix
