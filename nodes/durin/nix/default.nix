@@ -45,6 +45,29 @@ in
 
   nixpkgs.config.allowUnfreePredicate = pkg: lib.getName pkg == "vault";
 
+  # Admin CLI suite for interactive cluster operation. The systemd units
+  # carry their own runtimeInputs in commands.nix; this list is what admin
+  # login shells see on PATH.
+  environment.systemPackages = [
+    pkgs.kubectl
+    pkgs.kubernetes-helm
+    pkgs.cilium-cli
+    pkgs.hubble
+    pkgs.istioctl
+    pkgs.skopeo
+    pkgs.nerdctl
+    pkgs.kustomize
+    pkgs.k9s
+    pkgs.stern
+    pkgs.kubectx
+    pkgs.crane # go-containerregistry
+    pkgs.etcd # etcdctl, etcdutl
+    pkgs.cfssl
+    pkgs.jq
+    pkgs.yq-go
+    pkgs.kubecolor
+  ];
+
   # Open ports only on the I210 named lan1. Other interfaces, including
   # LAN2 and the BMC USB gadget, stay closed. Loopback is allowed by the
   # firewall module itself.
