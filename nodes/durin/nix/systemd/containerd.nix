@@ -49,12 +49,24 @@ in
 
   # disko declares data/containerd. On a pool that was created before that
   # dataset existed, create it before the mount unit runs.
+  #
+  # DefaultDependencies would add After=basic.target. This unit is Before=
+  # var-lib-containerd.mount, and that mount is Before=local-fs.target, which
+  # is ordered before basic.target. The result is an ordering cycle. systemd
+  # breaks it by deleting the mount job, so containerd and the kubelet never
+  # start. Keep this oneshot in the early-boot window, after the pool import
+  # and before the mount.
   systemd.services.containerd-dataset = {
     description = "Create the containerd dataset on the data pool";
     requiredBy = [ "var-lib-containerd.mount" ];
-    before = [ "var-lib-containerd.mount" ];
+    before = [
+      "var-lib-containerd.mount"
+      "shutdown.target"
+    ];
     after = [ "zfs-import.target" ];
     requires = [ "zfs-import.target" ];
+    conflicts = [ "shutdown.target" ];
+    unitConfig.DefaultDependencies = false;
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
