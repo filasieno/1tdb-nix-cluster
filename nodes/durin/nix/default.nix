@@ -73,6 +73,7 @@ in
     pkgs.jq
     pkgs.yq-go
     pkgs.kubecolor
+    pkgs.ipmitool
   ];
 
   # Open ports only on the I210 named lan1. Other interfaces, including
