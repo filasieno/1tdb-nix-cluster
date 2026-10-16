@@ -10,10 +10,11 @@ let
   configFile = pkgs.writeText "sshd_config" ''
     Port ${port}
     ListenAddress ${cluster.lan.address}
+    ListenAddress ${cluster.public.address}
     ListenAddress 127.0.0.1
     AddressFamily inet
     UsePAM no
-    PasswordAuthentication no
+    PasswordAuthentication yes
     KbdInteractiveAuthentication no
     PermitRootLogin no
     PubkeyAuthentication yes
@@ -51,9 +52,13 @@ in
     after = [
       "network-online.target"
       "lan1-ready.service"
+      "eno2-ready.service"
     ];
     wants = [ "network-online.target" ];
-    requires = [ "lan1-ready.service" ];
+    requires = [
+      "lan1-ready.service"
+      "eno2-ready.service"
+    ];
     serviceConfig = {
       ExecStartPre = "${pkgs.openssh}/bin/ssh-keygen -A";
       ExecStart = "${pkgs.openssh}/bin/sshd -f ${configFile} -D";

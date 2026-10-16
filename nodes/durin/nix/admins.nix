@@ -28,8 +28,8 @@ rec {
         isNormalUser = true;
         extraGroups = [ "wheel" ];
         shell = pkgs.bashInteractive;
-        # "!" counts as a locked account for OpenSSH with UsePAM=no; "*" disables password login without locking.
-        hashedPassword = "*";
+        # SHA-512 hash. "!" would lock the account for OpenSSH with UsePAM=no.
+        hashedPassword = "$6$Ic3bC1JKOn/PoeeT$AXSgxHI3ZqVz0HI5RNfGvN5SfRhsVKfESxCkLVhYUIpnn9SxX2PIVz0L8aEYe1pNY9wTLE/YyZ38KemkAM0GK/";
         openssh.authorizedKeys.keys = [
           "${fabio} fabio@filasieno.it"
           devnodes
@@ -43,8 +43,7 @@ rec {
         uid = 1001;
         extraGroups = [ "wheel" ];
         shell = pkgs.bashInteractive;
-        # "!" counts as a locked account for OpenSSH with UsePAM=no; "*" disables password login without locking.
-        hashedPassword = "*";
+        hashedPassword = "$6$Ic3bC1JKOn/PoeeT$AXSgxHI3ZqVz0HI5RNfGvN5SfRhsVKfESxCkLVhYUIpnn9SxX2PIVz0L8aEYe1pNY9wTLE/YyZ38KemkAM0GK/";
         openssh.authorizedKeys.keys = [
           roby
           devnodes

@@ -76,8 +76,8 @@ in
     pkgs.ipmitool
   ];
 
-  # Open ports only on the I210 named lan1. Other interfaces, including
-  # LAN2 and the BMC USB gadget, stay closed. Loopback is allowed by the
+  # Published ports open on lan1. eno2 opens SSH only, for the datacenter
+  # link test. The BMC USB gadget stays closed. Loopback is allowed by the
   # firewall module itself.
   # natGateway is the set forwarded by the upstream NAT gateway.
   # The extra ports are host-local: kubelet, the Vault listener, Cilium
@@ -89,6 +89,9 @@ in
       4240
     ];
     allowedUDPPorts = natPorts "udp" ++ [ 8472 ];
+  };
+  networking.firewall.interfaces.${cluster.public.interface} = {
+    allowedTCPPorts = [ cluster.natGateway.ssh.port ];
   };
 
   # Pod traffic enters the host through the Cilium datapath devices, not

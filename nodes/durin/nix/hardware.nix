@@ -97,6 +97,8 @@ in
       DHCP = "no";
       IPv6AcceptRA = false;
       LinkLocalAddressing = "no";
+      # Keep the address when the cable is out, so sshd can bind it at the datacenter.
+      ConfigureWithoutCarrier = true;
     };
   };
 
@@ -127,6 +129,37 @@ in
         Metric = 2048;
       }
     ];
+  };
+
+  systemd.services.eno2-ready = {
+    description = "Pinned address is configured on eno2";
+    wantedBy = [ "multi-user.target" ];
+    after = [
+      "systemd-networkd.service"
+      "network-online.target"
+    ];
+    wants = [ "network-online.target" ];
+    path = [
+      pkgs.iproute2
+      pkgs.gnugrep
+      pkgs.coreutils
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = pkgs.writeShellScript "eno2-ready" ''
+        set -euo pipefail
+        for _ in $(seq 1 30); do
+          if ip -4 addr show dev ${cluster.public.interface} 2>/dev/null \
+            | grep -q "inet ${cluster.public.address}/"; then
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "${cluster.public.interface} does not have ${cluster.public.address}" >&2
+        exit 1
+      '';
+    };
   };
 
   # The firewall opens ports by the name lan1. If the MAC match misses, that

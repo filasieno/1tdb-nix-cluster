@@ -151,7 +151,7 @@ The mirrored PM893 pair is the root pool. The Optane pool is the etcd WAL. The 9
 
 ## Installing
 
-Both routes wipe the four disks named in `nix/disko.nix`: the two PM893, the Optane, and the 990 PRO. Everything on them is gone, including the current Vault and etcd. Commit and push first: Nix copies only tracked files, and the console route fetches from GitHub. Passwords are locked for every account, so the BMC console is a view of the installed system, never a login into it; if `lan1-ready` fails on first boot, sshd does not start, and the way back in is the installer again.
+Both routes wipe the four disks named in `nix/disko.nix`: the two PM893, the Optane, and the 990 PRO. Everything on them is gone, including the current Vault and etcd. Commit and push first: Nix copies only tracked files, and the console route fetches from GitHub. Root stays locked. `fabio` and `roby` have a password and passwordless sudo, so the datacenter test can use SSH or the console. If `lan1-ready` or `eno2-ready` fails on first boot, sshd does not start, and the way back in is the installer again.
 
 ### From the installer console
 
