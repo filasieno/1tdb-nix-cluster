@@ -17,6 +17,16 @@ rec {
     gateway = "192.168.1.254";
     dns = "192.168.1.254";
   };
+  # Second I210. This is the datacenter uplink. lan1 stays the preferred
+  # default route while it has carrier; this gateway is used once lan1 is
+  # unplugged. The firewall does not open ports on this interface.
+  public = {
+    interface = "eno2";
+    mac = "90:5a:08:c2:f9:57";
+    address = "37.156.174.22";
+    prefix = 24;
+    gateway = "37.156.174.1";
+  };
   etcdToken = "1tdb-1";
   serviceCidr = "10.0.0.0/24";
   serviceIp = "10.0.0.1";

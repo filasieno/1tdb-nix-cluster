@@ -72,9 +72,8 @@ in
   fileSystems."/var/lib/containerd".neededForBoot = lib.mkForce false;
 
   networking.useNetworkd = true;
-  # Only the 10-lan1 network below configures an address. Today eno2 and the
-  # BMC USB gadget (enp14s0u10u2c2) both take DHCP, and eno2 adds a second
-  # default route. Neither gets an address after this install.
+  # lan1 and eno2 are configured below. The BMC USB gadget
+  # (enp14s0u10u2c2) takes no address.
   networking.useDHCP = false;
   networking.nameservers = [ cluster.lan.dns ];
   # Admin kubeconfigs use these names. On this host they are the LAN address,
@@ -99,6 +98,37 @@ in
       IPv6AcceptRA = false;
       LinkLocalAddressing = "no";
     };
+  };
+
+  # Datacenter uplink. Match the permanent MAC, same as lan1: the kernel
+  # name eno2 is what this port has today, and the link file keeps it there.
+  # RequiredForOnline is no, so a missing cable does not delay boot.
+  # The default route metric is worse than lan1, so 192.168.1.254 stays
+  # preferred until that link loses carrier.
+  systemd.network.links."10-eno2" = {
+    matchConfig.PermanentMACAddress = cluster.public.mac;
+    linkConfig.Name = cluster.public.interface;
+  };
+  systemd.network.networks."20-eno2" = {
+    matchConfig.PermanentMACAddress = cluster.public.mac;
+    address = [ "${cluster.public.address}/${toString cluster.public.prefix}" ];
+    linkConfig.RequiredForOnline = "no";
+    networkConfig = {
+      DHCP = "no";
+      IPv6AcceptRA = false;
+      LinkLocalAddressing = "no";
+      ConfigureWithoutCarrier = true;
+    };
+    routes = [
+      {
+        routeConfig = {
+          Destination = "0.0.0.0/0";
+          Gateway = cluster.public.gateway;
+          GatewayOnLink = true;
+          Metric = 2048;
+        };
+      }
+    ];
   };
 
   # The firewall opens ports by the name lan1. If the MAC match misses, that

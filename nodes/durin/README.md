@@ -6,6 +6,8 @@ Single control-plane and worker node. Cilium is the CNI and the service datapath
 
 `lan1` is the Intel I210 whose permanent MAC is `90:5a:08:c2:f9:56`. It has `192.168.1.230/24` via `192.168.1.254`. DHCP is off. The firewall opens published ports only on `lan1`.
 
+`eno2` is the Intel I210 whose permanent MAC is `90:5a:08:c2:f9:57`. It has `37.156.174.22/24` via `37.156.174.1`. That is the datacenter uplink. While `lan1` has carrier, its route stays the default. The firewall does not open ports on `eno2`.
+
 `lan1-ready.service` checks that this address is configured. sshd, the API server, the kubelet, and Vault require that unit. If the MAC rename does not apply, those services do not start, and the firewall rules are not left matching an interface that does not exist.
 
 On this host, `k3s.1tdb.io` resolves to `192.168.1.230`. The website name is `www.1tdb.io`, and it is not on the API certificate. Control-plane kubeconfigs use `https://127.0.0.1:6443`. Admin kubeconfigs use `https://k3s.1tdb.io:6443`.
@@ -99,7 +101,7 @@ spec:
 
 Istio still creates a Service named `edge-istio`. With `type: ClusterIP` it has no load-balancer address. Clients use `192.168.1.230` and the listener port. The TLS Secret `k3s-1tdb-tls` has to exist before the HTTPS listener is programmed. A route's `parentRef` selects this Gateway.
 
-In a datacenter, change the HTTP and HTTPS ports to 80 and 443, open those ports on `lan1`, and add `NET_BIND_SERVICE` to the `istio-proxy` container in the same ConfigMap. Ask the datacenter to route one public address to MAC `90:5a:08:c2:f9:56`. That address is configured on the NIC. It is not a virtual IP.
+In a datacenter, change the HTTP and HTTPS ports to 80 and 443, open those ports on `lan1`, and add `NET_BIND_SERVICE` to the `istio-proxy` container in the same ConfigMap. The datacenter public address is `37.156.174.22/24` on `eno2`, MAC `90:5a:08:c2:f9:57`. It is configured on that NIC. It is not a virtual IP.
 
 ## Vault
 
