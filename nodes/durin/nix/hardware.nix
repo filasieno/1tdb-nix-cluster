@@ -121,12 +121,10 @@ in
     };
     routes = [
       {
-        routeConfig = {
-          Destination = "0.0.0.0/0";
-          Gateway = cluster.public.gateway;
-          GatewayOnLink = true;
-          Metric = 2048;
-        };
+        Destination = "0.0.0.0/0";
+        Gateway = cluster.public.gateway;
+        GatewayOnLink = true;
+        Metric = 2048;
       }
     ];
   };
