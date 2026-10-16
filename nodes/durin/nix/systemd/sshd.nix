@@ -13,7 +13,7 @@ let
     ListenAddress ${cluster.public.address}
     ListenAddress 127.0.0.1
     AddressFamily inet
-    UsePAM no
+    UsePAM yes
     PasswordAuthentication yes
     KbdInteractiveAuthentication no
     PermitRootLogin no
@@ -41,6 +41,12 @@ in
   };
 
   environment.etc = authorizedKeys "fabio" // authorizedKeys "roby";
+
+  # sshd verifies passwords through pam_unix, which reads the hashes in admins.nix.
+  security.pam.services.sshd = {
+    unixAuth = true;
+    startSession = true;
+  };
 
   systemd.tmpfiles.rules = [
     "d /var/empty 0755 root root -"

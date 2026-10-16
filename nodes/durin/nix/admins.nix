@@ -28,7 +28,7 @@ rec {
         isNormalUser = true;
         extraGroups = [ "wheel" ];
         shell = pkgs.bashInteractive;
-        # SHA-512 hash. "!" would lock the account for OpenSSH with UsePAM=no.
+        # SHA-512 hash. sshd checks it through pam_unix.
         hashedPassword = "$6$Ic3bC1JKOn/PoeeT$AXSgxHI3ZqVz0HI5RNfGvN5SfRhsVKfESxCkLVhYUIpnn9SxX2PIVz0L8aEYe1pNY9wTLE/YyZ38KemkAM0GK/";
         openssh.authorizedKeys.keys = [
           "${fabio} fabio@filasieno.it"
