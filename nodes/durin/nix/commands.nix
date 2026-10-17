@@ -8,6 +8,20 @@ let
   kubeconfig = import ./kubeconfig.nix;
   shell = ../shell;
 
+  # Platform realm client used by kubectl oidc-login. The ID token audience
+  # is this client id. Groups in the token are Keycloak group names; the
+  # prefix below is what RoleBinding subjects must use (oidc:admin).
+  # The apiserver fetches JWKS from the issuer URL, so this host must be
+  # able to open https://keycloak.1tdb.io (public DNS and NAT hairpin).
+  oidc = {
+    issuerUrl = "https://keycloak.1tdb.io/realms/Platform";
+    clientId = "kubernetes";
+    usernameClaim = "preferred_username";
+    usernamePrefix = "oidc:";
+    groupsClaim = "groups";
+    groupsPrefix = "oidc:";
+  };
+
   clusterAdminKubeconfig = kubeconfig {
     inherit pkgs;
     name = "cluster-admin";
@@ -27,10 +41,8 @@ let
   # sidecar never sees the traffic; cni.exclusive must stay false so Istio's
   # CNI config is not renamed away; gatewayAPI and Envoy stay off so Cilium
   # does not claim Gateway resources Istio will own.
-  # devices is only lan1. The BMC USB gadget must not get the BPF datapath.
+  # devices is only the bridge. The BMC USB gadget must not get the BPF datapath.
   ciliumValues = pkgs.writeText "cilium-values.yaml" ''
-    operator:
-      replicas: 1
     kubeProxyReplacement: "true"
     k8sServiceHost: "${cluster.lan.address}"
     k8sServicePort: "${builtins.toString cluster.natGateway.apiserver.port}"
@@ -57,12 +69,33 @@ let
       enabled: false
     envoyConfig:
       enabled: false
-    # Hubble's server is already on (chart default). Relay and UI are not, and
-    # their mTLS material is minted by this Helm release. cilium-install owns
-    # the release and re-applies these values, so Flux cannot add them.
+    # Hubble's server is already on (chart default). Relay, UI, and the
+    # Prometheus listeners are not, and their mTLS material is minted by this
+    # Helm release. cilium-install owns the release and re-applies these
+    # values, so Flux cannot add them. metricsService publishes the agent and
+    # operator ports; the ServiceMonitors live in 1tdb-cluster because the
+    # Prometheus Operator CRDs are not installed when this chart first runs.
+    prometheus:
+      enabled: true
+      metricsService: true
+    operator:
+      replicas: 1
+      prometheus:
+        enabled: true
+        metricsService: true
     hubble:
+      metrics:
+        enabled:
+          - dns
+          - drop
+          - tcp
+          - flow
+          - icmp
+          - http
       relay:
         enabled: true
+        prometheus:
+          enabled: true
       ui:
         enabled: true
   '';
@@ -143,7 +176,11 @@ in
   adminKubeconfig = pkgs.writeShellApplication {
     name = "kubernetes-admin-kubeconfig";
     runtimeInputs = [ pkgs.coreutils ];
-    runtimeEnv.KUBERNETES_API_SERVER = cluster.publicApiServer;
+    runtimeEnv = {
+      KUBERNETES_API_SERVER = cluster.publicApiServer;
+      OIDC_ISSUER_URL = oidc.issuerUrl;
+      OIDC_CLIENT_ID = oidc.clientId;
+    };
     text = builtins.readFile (shell + "/admin-kubeconfig.sh");
   };
 
@@ -309,6 +346,12 @@ in
     exec ${pkgs.etcd}/bin/etcd
   '';
 
+  # Request-header auth is what aggregated API servers (metrics-server) use to
+  # see the original user. The proxy certificate is CN=front-proxy-client,
+  # signed by the same CA as every other client, so allowed-names is required:
+  # without it kube-apiserver refuses to start, and any client certificate
+  # could impersonate. Without these flags, kubectl top is authorized as
+  # front-proxy-client and denied.
   kubeApiserver = pkgs.writeShellScript "kube-apiserver" ''
     exec ${pkgs.kubernetes}/bin/kube-apiserver \
       --allow-privileged=true \
@@ -327,6 +370,11 @@ in
       --kubelet-client-key=${cluster.key "kube-apiserver-kubelet-client"} \
       --proxy-client-cert-file=${cluster.cert "kube-apiserver-proxy-client"} \
       --proxy-client-key-file=${cluster.key "kube-apiserver-proxy-client"} \
+      --requestheader-client-ca-file=${cluster.cert "ca"} \
+      --requestheader-allowed-names=front-proxy-client \
+      --requestheader-username-headers=X-Remote-User \
+      --requestheader-group-headers=X-Remote-Group \
+      --requestheader-extra-headers-prefix=X-Remote-Extra- \
       --etcd-servers=${cluster.etcdClient} \
       --etcd-cafile=${cluster.cert "ca"} \
       --etcd-certfile=${cluster.cert "kube-apiserver-etcd-client"} \
@@ -336,7 +384,13 @@ in
       --service-account-key-file=${cluster.cert "service-account"} \
       --service-account-signing-key-file=${cluster.key "service-account"} \
       --api-audiences=https://kubernetes.default.svc \
-      --storage-backend=etcd3
+      --storage-backend=etcd3 \
+      --oidc-issuer-url=${oidc.issuerUrl} \
+      --oidc-client-id=${oidc.clientId} \
+      --oidc-username-claim=${oidc.usernameClaim} \
+      --oidc-username-prefix=${oidc.usernamePrefix} \
+      --oidc-groups-claim=${oidc.groupsClaim} \
+      --oidc-groups-prefix=${oidc.groupsPrefix}
   '';
 
   kubeControllerManager = pkgs.writeShellScript "kube-controller-manager" ''

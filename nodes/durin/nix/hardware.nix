@@ -72,67 +72,73 @@ in
   fileSystems."/var/lib/containerd".neededForBoot = lib.mkForce false;
 
   networking.useNetworkd = true;
-  # lan1 and eno2 are configured below. The BMC USB gadget
-  # (enp14s0u10u2c2) takes no address.
+  # br0 holds the address. eno1 and eno2 are only bridge ports. The BMC USB
+  # gadget (enp14s0u10u2c2) is not a member and takes no address.
   networking.useDHCP = false;
-  networking.nameservers = [ cluster.lan.dns ];
-  # Admin kubeconfigs use these names. On this host they are the LAN address,
-  # so kubectl works before public DNS is delegated.
+  networking.nameservers = cluster.lan.dns;
+  # Admin kubeconfigs use these names. On this host they are the bridge
+  # address, so kubectl works before public DNS is delegated.
   networking.hosts.${cluster.lan.address} = (import ./api-domain.nix).names;
-  # Rename the I210 whose permanent address is cluster.lan.mac. Matching the
-  # name eno1 is not enough: the AST2600 USB gadget and LAN2 are also ethernet
-  # devices, and a kernel name can move. The address is static so the NAT
-  # gateway forwards always land on this card.
-  systemd.network.links."10-lan1" = {
-    matchConfig.PermanentMACAddress = cluster.lan.mac;
-    linkConfig.Name = cluster.lan.interface;
-  };
-  systemd.network.networks."10-lan1" = {
-    matchConfig.PermanentMACAddress = cluster.lan.mac;
-    address = [ "${cluster.lan.address}/${toString cluster.lan.prefix}" ];
-    gateway = [ cluster.lan.gateway ];
-    dns = [ cluster.lan.dns ];
-    linkConfig.RequiredForOnline = "routable";
-    networkConfig = {
-      DHCP = "no";
-      IPv6AcceptRA = false;
-      LinkLocalAddressing = "no";
-      # Keep the address when the cable is out, so sshd can bind it at the datacenter.
-      ConfigureWithoutCarrier = true;
-    };
-  };
 
-  # Datacenter uplink. Match the permanent MAC, same as lan1: the kernel
-  # name eno2 is what this port has today, and the link file keeps it there.
-  # RequiredForOnline is no, so a missing cable does not delay boot.
-  # The default route metric is worse than lan1, so 192.168.1.254 stays
-  # preferred until that link loses carrier.
-  systemd.network.links."10-eno2" = {
-    matchConfig.PermanentMACAddress = cluster.public.mac;
-    linkConfig.Name = cluster.public.interface;
-  };
-  systemd.network.networks."20-eno2" = {
-    matchConfig.PermanentMACAddress = cluster.public.mac;
-    address = [ "${cluster.public.address}/${toString cluster.public.prefix}" ];
-    linkConfig.RequiredForOnline = "no";
-    networkConfig = {
-      DHCP = "no";
-      IPv6AcceptRA = false;
-      LinkLocalAddressing = "no";
-      ConfigureWithoutCarrier = true;
+  systemd.network.netdevs."10-br0" = {
+    netdevConfig = {
+      Name = cluster.lan.interface;
+      Kind = "bridge";
+      MACAddress = cluster.lan.mac;
     };
-    routes = [
-      {
-        Destination = "0.0.0.0/0";
-        Gateway = cluster.public.gateway;
-        GatewayOnLink = true;
-        Metric = 2048;
-      }
-    ];
+    bridgeConfig.STP = true;
   };
+  systemd.network.links = lib.listToAttrs (
+    map (member: {
+      name = "10-${member.name}";
+      value = {
+        matchConfig.PermanentMACAddress = member.mac;
+        linkConfig.Name = member.name;
+      };
+    }) cluster.lan.members
+  );
+  systemd.network.networks =
+    {
+      "30-br0" = {
+        matchConfig.Name = cluster.lan.interface;
+        address = [ "${cluster.lan.address}/${toString cluster.lan.prefix}" ];
+        routes = [
+          {
+            Destination = "0.0.0.0/0";
+            Gateway = cluster.lan.gateway;
+            GatewayOnLink = true;
+          }
+        ];
+        dns = cluster.lan.dns;
+        linkConfig.RequiredForOnline = "routable";
+        networkConfig = {
+          DHCP = "no";
+          IPv6AcceptRA = false;
+          LinkLocalAddressing = "no";
+          ConfigureWithoutCarrier = true;
+        };
+      };
+    }
+    // lib.listToAttrs (
+      map (member: {
+        name = "20-${member.name}";
+        value = {
+          matchConfig.PermanentMACAddress = member.mac;
+          linkConfig.RequiredForOnline = "no";
+          networkConfig = {
+            Bridge = cluster.lan.interface;
+            DHCP = "no";
+            IPv6AcceptRA = false;
+            LinkLocalAddressing = "no";
+          };
+        };
+      }) cluster.lan.members
+    );
 
-  systemd.services.eno2-ready = {
-    description = "Pinned address is configured on eno2";
+  # The firewall opens ports by the bridge name. sshd, the API server, the
+  # kubelet, and Vault require this unit.
+  systemd.services.br0-ready = {
+    description = "Pinned address is configured on br0";
     wantedBy = [ "multi-user.target" ];
     after = [
       "systemd-networkd.service"
@@ -147,42 +153,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = pkgs.writeShellScript "eno2-ready" ''
-        set -euo pipefail
-        for _ in $(seq 1 30); do
-          if ip -4 addr show dev ${cluster.public.interface} 2>/dev/null \
-            | grep -q "inet ${cluster.public.address}/"; then
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "${cluster.public.interface} does not have ${cluster.public.address}" >&2
-        exit 1
-      '';
-    };
-  };
-
-  # The firewall opens ports by the name lan1. If the MAC match misses, that
-  # name never appears and every allow rule matches nothing. sshd, the API
-  # server, the kubelet, and Vault require this unit, so a missed rename
-  # stops those services instead of booting with the ports closed.
-  systemd.services.lan1-ready = {
-    description = "Pinned address is configured on lan1";
-    wantedBy = [ "multi-user.target" ];
-    after = [
-      "systemd-networkd.service"
-      "network-online.target"
-    ];
-    wants = [ "network-online.target" ];
-    path = [
-      pkgs.iproute2
-      pkgs.gnugrep
-      pkgs.coreutils
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = pkgs.writeShellScript "lan1-ready" ''
+      ExecStart = pkgs.writeShellScript "br0-ready" ''
         set -euo pipefail
         for _ in $(seq 1 30); do
           if ip -4 addr show dev ${cluster.lan.interface} 2>/dev/null \
@@ -191,7 +162,7 @@ in
           fi
           sleep 1
         done
-        echo "${cluster.lan.interface} does not have ${cluster.lan.address}; the MAC rename did not apply" >&2
+        echo "${cluster.lan.interface} does not have ${cluster.lan.address}" >&2
         exit 1
       '';
     };

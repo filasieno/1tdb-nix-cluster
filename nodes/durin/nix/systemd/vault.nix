@@ -93,12 +93,12 @@ in
     wantedBy = [ "multi-user.target" ];
     requires = [
       "vault-tls.service"
-      "lan1-ready.service"
+      "br0-ready.service"
     ];
     after = [
       "vault-tls.service"
       "network-online.target"
-      "lan1-ready.service"
+      "br0-ready.service"
     ];
     wants = [ "network-online.target" ];
     serviceConfig = {

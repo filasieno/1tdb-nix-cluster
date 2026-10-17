@@ -1,17 +1,17 @@
-# Bridge the NAT gateway ports to the Istio ingress NodePorts: the FASTGate
-# forwards public 443 -> 7443 and 80 -> 8080 on this host, and these units
-# carry each connection on to the istio-ingress Service.
+# Bridge the high ports to the Istio ingress NodePorts. Public 80 and 443
+# are the GitOps Service istio-ingress-public, not these units. These units
+# still carry 8080 and 7443 on to the istio-ingress Service.
 #
 # A netfilter REDIRECT/DNAT to the NodePort cannot do this here. Cilium
-# replaces kube-proxy and serves NodePorts in BPF at TC ingress on lan1,
+# replaces kube-proxy and serves NodePorts in BPF at TC ingress on eno1,
 # which runs before the nat PREROUTING hook; a packet rewritten there to
 # :30443 reaches the local stack, where no socket listens, and is refused.
 # systemd-socket-proxyd instead connects from the host namespace, where
 # Cilium's socket LB (hostNamespaceOnly) picks the ingress backend.
 #
-# The firewall already opens these ports on lan1: default.nix opens every
+# The firewall already opens these ports on eno1: default.nix opens every
 # natGateway port there. FreeBind lets the socket bind the pinned address
-# before lan1 is renamed and configured.
+# before eno1 is renamed and configured.
 { lib, pkgs, ... }:
 let
   cluster = import ../cluster.nix;

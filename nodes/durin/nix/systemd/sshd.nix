@@ -10,11 +10,10 @@ let
   configFile = pkgs.writeText "sshd_config" ''
     Port ${port}
     ListenAddress ${cluster.lan.address}
-    ListenAddress ${cluster.public.address}
     ListenAddress 127.0.0.1
     AddressFamily inet
     UsePAM yes
-    PasswordAuthentication yes
+    PasswordAuthentication no
     KbdInteractiveAuthentication no
     PermitRootLogin no
     PubkeyAuthentication yes
@@ -42,7 +41,8 @@ in
 
   environment.etc = authorizedKeys "fabio" // authorizedKeys "roby";
 
-  # sshd verifies passwords through pam_unix, which reads the hashes in admins.nix.
+  # Password authentication is off. Login is the keys in admins.nix.
+  # PAM still opens the session.
   security.pam.services.sshd = {
     unixAuth = true;
     startSession = true;
@@ -57,13 +57,11 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [
       "network-online.target"
-      "lan1-ready.service"
-      "eno2-ready.service"
+      "br0-ready.service"
     ];
     wants = [ "network-online.target" ];
     requires = [
-      "lan1-ready.service"
-      "eno2-ready.service"
+      "br0-ready.service"
     ];
     serviceConfig = {
       ExecStartPre = "${pkgs.openssh}/bin/ssh-keygen -A";

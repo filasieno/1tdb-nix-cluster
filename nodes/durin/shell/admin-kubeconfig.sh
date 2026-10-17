@@ -15,8 +15,13 @@
 # rejects a key the group or others can read, and a root-owned key is
 # unreadable by the operator, so that operator cannot connect.
 #
+# Context oidc is the kubelogin user. current-context stays the client
+# certificate, so a rebuild does not send kubectl to the browser.
+#
 # Environment, set by the Nix wrapper:
 #   KUBERNETES_API_SERVER  apiserver URL, including scheme and port
+#   OIDC_ISSUER_URL        Platform realm issuer
+#   OIDC_CLIENT_ID         Keycloak client id (kubernetes)
 #
 # Wrapped by the command derivation (errexit, nounset, pipefail; PATH
 # includes coreutils).
@@ -60,11 +65,28 @@ contexts:
   context:
     cluster: local
     user: $username
+- name: oidc
+  context:
+    cluster: local
+    user: oidc
 users:
 - name: $username
   user:
     client-certificate: $cert
     client-key: $key
+- name: oidc
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: kubectl
+      args:
+      - oidc-login
+      - get-token
+      - --oidc-issuer-url=${OIDC_ISSUER_URL}
+      - --oidc-client-id=${OIDC_CLIENT_ID}
+      env: []
+      interactiveMode: IfAvailable
+      provideClusterInfo: false
 current-context: local
 EOF
     chown "$user:users" "$home/.kube/config"

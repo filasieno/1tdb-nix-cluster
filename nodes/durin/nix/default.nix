@@ -55,6 +55,7 @@ in
   # login shells see on PATH.
   environment.systemPackages = [
     pkgs.kubectl
+    pkgs.kubelogin-oidc # kubectl oidc-login; binary is kubectl-oidc_login
     pkgs.kubernetes-helm
     pkgs.cilium-cli
     pkgs.hubble
@@ -74,11 +75,14 @@ in
     pkgs.yq-go
     pkgs.kubecolor
     pkgs.ipmitool
+    pkgs.python3
+    pkgs.iproute2
+    pkgs.ethtool
+    pkgs.tcpdump
   ];
 
-  # Published ports open on lan1. eno2 opens SSH only, for the datacenter
-  # link test. The BMC USB gadget stays closed. Loopback is allowed by the
-  # firewall module itself.
+  # Published ports open on the bridge. The BMC USB gadget stays closed.
+  # Loopback is allowed by the firewall module itself.
   # natGateway is the set forwarded by the upstream NAT gateway.
   # The extra ports are host-local: kubelet, the Vault listener, Cilium
   # health, and Cilium VXLAN.
@@ -90,13 +94,10 @@ in
     ];
     allowedUDPPorts = natPorts "udp" ++ [ 8472 ];
   };
-  networking.firewall.interfaces.${cluster.public.interface} = {
-    allowedTCPPorts = [ cluster.natGateway.ssh.port ];
-  };
 
   # Pod traffic enters the host through the Cilium datapath devices, not
-  # lan1: a pod reaching the apiserver ClusterIP is BPF-translated to
-  # 192.168.1.230:6443 and would otherwise hit the default drop. Cilium
+  # the bridge: a pod reaching the apiserver ClusterIP is BPF-translated to
+  # the bridge address on 6443 and would otherwise hit the default drop. Cilium
   # network policy governs that path; the host firewall trusts it.
   networking.firewall.trustedInterfaces = [
     "cilium_host"

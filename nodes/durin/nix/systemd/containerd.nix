@@ -1,9 +1,53 @@
 {
   config,
+  lib,
   pkgs,
   ...
 }:
 let
+  # One Artifact Keeper remote per upstream. The host path is the repository
+  # key, so docker.io/library/alpine is pulled from
+  # artifact.1tdb.io/v2/dockerhub/library/alpine. server stays the real
+  # upstream and is used when the cache is down. Image names in manifests
+  # stay unchanged.
+  mirrors = {
+    "docker.io" = {
+      repo = "dockerhub";
+      upstream = "https://registry-1.docker.io";
+    };
+    "ghcr.io" = {
+      repo = "ghcr";
+      upstream = "https://ghcr.io";
+    };
+    "quay.io" = {
+      repo = "quay";
+      upstream = "https://quay.io";
+    };
+    "registry.k8s.io" = {
+      repo = "k8s";
+      upstream = "https://registry.k8s.io";
+    };
+    "gcr.io" = {
+      repo = "gcr";
+      upstream = "https://gcr.io";
+    };
+    "mcr.microsoft.com" = {
+      repo = "mcr";
+      upstream = "https://mcr.microsoft.com";
+    };
+    "public.ecr.aws" = {
+      repo = "ecr-public";
+      upstream = "https://public.ecr.aws";
+    };
+    "reg.kyverno.io" = {
+      repo = "kyverno";
+      upstream = "https://reg.kyverno.io";
+    };
+    "registry.istio.io" = {
+      repo = "istio";
+      upstream = "https://registry.istio.io";
+    };
+  };
   configFile = pkgs.writeText "containerd.toml" ''
     version = 2
     root = "/var/lib/containerd"
@@ -33,6 +77,9 @@ let
     [plugins."io.containerd.cri.v1.images"]
       snapshotter = "zfs"
 
+      [plugins."io.containerd.cri.v1.images".registry]
+        config_path = "/etc/containerd/certs.d"
+
     # containerd 2 migrates version = 2, including io.containerd.grpc.v1.cri.
     # The transfer unpack path is not part of that migration.
     [plugins."io.containerd.transfer.v1.local"]
@@ -46,6 +93,19 @@ in
     "d /etc/cni/net.d 0755 root root -"
     "d /opt/cni/bin 0755 root root -"
   ];
+
+  environment.etc = lib.mapAttrs' (host: mirror:
+    lib.nameValuePair "containerd/certs.d/${host}/hosts.toml" {
+      text = ''
+        server = "${mirror.upstream}"
+
+        [host."https://artifact.1tdb.io/v2/${mirror.repo}"]
+          capabilities = ["pull", "resolve"]
+          override_path = true
+          dial_timeout = "5s"
+      '';
+    }
+  ) mirrors;
 
   # disko declares data/containerd. On a pool that was created before that
   # dataset existed, create it before the mount unit runs.

@@ -4,13 +4,11 @@ Single control-plane and worker node. Cilium is the CNI and the service datapath
 
 ## Addresses
 
-`lan1` is the Intel I210 whose permanent MAC is `90:5a:08:c2:f9:56`. It has `192.168.1.230/24` via `192.168.1.254`. DHCP is off. The firewall opens published ports only on `lan1`.
+`br0` holds `37.156.174.22/24` via `37.156.174.1`. Both onboard I210 ports are members and have no address of their own: `eno1` (`90:5a:08:c2:f9:56`) and `eno2` (`90:5a:08:c2:f9:57`). The bridge MAC is `eno2`. The firewall opens published ports on `br0`. The BMC USB gadget is not a member.
 
-`eno2` is the Intel I210 whose permanent MAC is `90:5a:08:c2:f9:57`. It has `37.156.174.22/24` via `37.156.174.1`. That is the datacenter uplink. While `lan1` has carrier, its route stays the default. The firewall does not open ports on `eno2`.
+`br0-ready.service` checks that this address is configured. sshd, the API server, the kubelet, and Vault require that unit. If the bridge does not come up, those services do not start.
 
-`lan1-ready.service` checks that this address is configured. sshd, the API server, the kubelet, and Vault require that unit. If the MAC rename does not apply, those services do not start, and the firewall rules are not left matching an interface that does not exist.
-
-On this host, `k3s.1tdb.io` resolves to `192.168.1.230`. The website name is `www.1tdb.io`, and it is not on the API certificate. Control-plane kubeconfigs use `https://127.0.0.1:6443`. Admin kubeconfigs use `https://k3s.1tdb.io:6443`.
+On this host, `k3s.1tdb.io` resolves to `37.156.174.22`. The website name is `www.1tdb.io`, and it is not on the API certificate. Control-plane kubeconfigs use `https://127.0.0.1:6443`. Admin kubeconfigs use `https://k3s.1tdb.io:6443`.
 
 ## Cilium replaces kube-proxy
 
@@ -19,12 +17,12 @@ On this host, `k3s.1tdb.io` resolves to `192.168.1.230`. The website name is `ww
 | Value | Why |
 | --- | --- |
 | `kubeProxyReplacement: true` | Cilium BPF implements ClusterIP and masquerade. There is no kube-proxy unit. |
-| `k8sServiceHost` / `k8sServicePort` | `192.168.1.230` and `6443`. The agent and operator reach the API without a ClusterIP. |
+| `k8sServiceHost` / `k8sServicePort` | The bridge address and `6443`. The agent and operator reach the API without a ClusterIP. |
 | `waitForKubeProxy: false` | The chart must not block on a kube-proxy iptables rule. |
-| `devices: lan1` | BPF attaches only to the pinned NIC, not to the BMC USB gadget. |
+| `devices: br0` | BPF attaches only to the bridge, not to the BMC USB gadget. |
 | `socketLB.enabled` and `socketLB.hostNamespaceOnly` | Socket load balancing stays in the host network namespace. A future Istio sidecar in a pod still sees the original destination. |
 | `cni.exclusive: false` | Cilium does not rename a CNI config that Istio adds later. |
-| `bpf.masquerade` and `enableIPv4Masquerade` | Pod egress is masqueraded on `lan1` without kube-proxy. |
+| `bpf.masquerade` and `enableIPv4Masquerade` | Pod egress is masqueraded on the bridge without kube-proxy. |
 | `gatewayAPI.enabled: false`, `envoy.enabled: false`, `l7Proxy: false` | Cilium does not own Gateway resources or run its own Envoy. Istio will. |
 
 Do not turn `gatewayAPI.enabled` on when Flux installs Istio. Two controllers would both program `Gateway` objects.
@@ -39,7 +37,7 @@ Flux can install Istio. This node does not. Bootstrap Flux against the API after
 
 Do not put that manifest in `addons/`. `kube-addons` applies that directory on every start, and the Gateway CRD will not exist until Flux has installed it.
 
-`hostNetwork: true` makes Envoy bind `0.0.0.0` on each listener port. The Gateway API has no field that selects `192.168.1.230`. The packet arrives on `lan1` because that is the only card with this address, the upstream forward targets it, and the firewall allows the port only there.
+`hostNetwork: true` makes Envoy bind `0.0.0.0` on each listener port. The Gateway API has no field that selects `192.168.1.230`. The packet arrives on `eno1` because that is the only card with this address, the upstream forward targets it, and the firewall allows the port only there.
 
 ```yaml
 apiVersion: v1
@@ -101,7 +99,7 @@ spec:
 
 Istio still creates a Service named `edge-istio`. With `type: ClusterIP` it has no load-balancer address. Clients use `192.168.1.230` and the listener port. The TLS Secret `k3s-1tdb-tls` has to exist before the HTTPS listener is programmed. A route's `parentRef` selects this Gateway.
 
-In a datacenter, change the HTTP and HTTPS ports to 80 and 443, open those ports on `lan1`, and add `NET_BIND_SERVICE` to the `istio-proxy` container in the same ConfigMap. The datacenter public address is `37.156.174.22/24` on `eno2`, MAC `90:5a:08:c2:f9:57`. It is configured on that NIC. It is not a virtual IP.
+In a datacenter, change the HTTP and HTTPS ports to 80 and 443, open those ports on `eno1`, and add `NET_BIND_SERVICE` to the `istio-proxy` container in the same ConfigMap. The datacenter public address is `37.156.174.22/24` on `eno2`, MAC `90:5a:08:c2:f9:57`. It is configured on that NIC. It is not a virtual IP.
 
 ## Vault
 
@@ -151,7 +149,7 @@ The mirrored PM893 pair is the root pool. The Optane pool is the etcd WAL. The 9
 
 ## Installing
 
-Both routes wipe the four disks named in `nix/disko.nix`: the two PM893, the Optane, and the 990 PRO. Everything on them is gone, including the current Vault and etcd. Commit and push first: Nix copies only tracked files, and the console route fetches from GitHub. Root stays locked. `fabio` and `roby` have a password and passwordless sudo, so the datacenter test can use SSH or the console. If `lan1-ready` or `eno2-ready` fails on first boot, sshd does not start, and the way back in is the installer again.
+Both routes wipe the four disks named in `nix/disko.nix`: the two PM893, the Optane, and the 990 PRO. Everything on them is gone, including the current Vault and etcd. Commit and push first: Nix copies only tracked files, and the console route fetches from GitHub. Root stays locked. `fabio` and `roby` have a password and passwordless sudo, so the datacenter test can use SSH or the console. If `eno1-ready` or `eno2-ready` fails on first boot, sshd does not start, and the way back in is the installer again.
 
 ### From the installer console
 
@@ -182,7 +180,7 @@ nix run github:nix-community/nixos-anywhere -- \
   --flake .#durin \
   --build-on remote \
   --target-host fabio@192.168.1.230 \
-  --ssh-port 2222 \
+  --ssh-port 22 \
   --copy-host-keys
 ```
 
@@ -190,7 +188,7 @@ After kexec the installer listens on port 22, which is nixos-anywhere's default 
 
 ### First boot
 
-`kubernetes-pki` mints a new CA, `cilium-install` installs the chart, sshd answers on 2222 for the admin keys in `nix/admins.nix`. If `secrets/azure-client-secret.cred` is in the flake, `vault-init` initializes Vault against the Azure key and writes `recovery.age`; if it is absent, seal it as described under Vault and switch. Flux and Istio come after that.
+`kubernetes-pki` mints a new CA, `cilium-install` installs the chart, sshd answers on 22 for the admin keys in `nix/admins.nix`. If `secrets/azure-client-secret.cred` is in the flake, `vault-init` initializes Vault against the Azure key and writes `recovery.age`; if it is absent, seal it as described under Vault and switch. Flux and Istio come after that.
 
 ## Still outside this repo
 

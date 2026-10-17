@@ -24,12 +24,12 @@
       "kubernetes-pki.service"
       "kube-apiserver.service"
       "network-online.target"
-      "lan1-ready.service"
+      "br0-ready.service"
     ];
     requires = [
       "containerd.service"
       "kubernetes-pki.service"
-      "lan1-ready.service"
+      "br0-ready.service"
     ];
     wants = [
       "kube-apiserver.service"

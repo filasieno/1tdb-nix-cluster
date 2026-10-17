@@ -7,25 +7,29 @@ rec {
   host = "durin";
   name = "1tdb";
   address = "127.0.0.1";
-  # Intel I210 LAN1. Published ports are opened only on this card.
-  # The gateway is the FASTGate on this subnet.
+  # Both onboard I210 ports are bridge members. The address is the
+  # datacenter address and lives on the bridge, not on either card.
+  # The bridge MAC is eno2, which already owns this address on the switch.
   lan = {
-    interface = "lan1";
-    mac = "90:5a:08:c2:f9:56";
-    address = "192.168.1.230";
-    prefix = 24;
-    gateway = "192.168.1.254";
-    dns = "192.168.1.254";
-  };
-  # Second I210. This is the datacenter uplink. lan1 stays the preferred
-  # default route while it has carrier; this gateway is used once lan1 is
-  # unplugged. The firewall does not open ports on this interface.
-  public = {
-    interface = "eno2";
+    interface = "br0";
     mac = "90:5a:08:c2:f9:57";
     address = "37.156.174.22";
     prefix = 24;
     gateway = "37.156.174.1";
+    dns = [
+      "1.1.1.1"
+      "8.8.8.8"
+    ];
+    members = [
+      {
+        name = "eno1";
+        mac = "90:5a:08:c2:f9:56";
+      }
+      {
+        name = "eno2";
+        mac = "90:5a:08:c2:f9:57";
+      }
+    ];
   };
   etcdToken = "1tdb-1";
   serviceCidr = "10.0.0.0/24";
@@ -34,12 +38,12 @@ rec {
   clusterDns = "10.0.0.10";
   secrets = "/var/lib/kubernetes/secrets";
 
-  # Ports the upstream NAT gateway forwards to this host.
-  # sshd, the apiserver, and the host firewall all read this set.
-  # Change a number here; do not duplicate it in a unit.
-  # Entries with a nodePort are bridged to the Istio ingress by
-  # systemd/ingress-forward.nix. The NodePort numbers are fixed in the
-  # 1tdb-cluster repo, infrastructure/istio/gateway/helmrelease.yaml.
+  # Ports opened on the bridge. sshd, the apiserver, and the host firewall
+  # all read this set. Change a number here; do not duplicate it in a unit.
+  # HTTP and HTTPS on 80 and 443 are published by the GitOps Service
+  # istio-ingress-public. Entries with a nodePort are still bridged by
+  # systemd/ingress-forward.nix. The NodePort numbers are fixed in
+  # 1tdb-cluster, infrastructure/istio/gateway/helmrelease.yaml.
   natGateway = {
     apiserver = {
       port = 6443;
@@ -60,7 +64,7 @@ rec {
       protocol = "udp";
     };
     ssh = {
-      port = 2222;
+      port = 22;
       protocol = "tcp";
     };
   };
