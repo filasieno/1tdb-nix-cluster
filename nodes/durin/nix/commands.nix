@@ -58,7 +58,9 @@ let
     cni:
       exclusive: false
     bpf:
-      masquerade: true
+      # Istio ambient SNATs kubelet probes to 169.254.7.127. BPF masquerade
+      # does not support that address; iptables masquerade does.
+      masquerade: false
       # Cilium 1.20 writes enable-host-legacy-routing from this key. BPF host
       # routing skips pod netfilter, so ztunnel never SNATs kubelet probes off
       # 169.254.7.127 and NetworkPolicy drops them as world.
