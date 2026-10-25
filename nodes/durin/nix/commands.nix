@@ -60,6 +60,9 @@ let
     bpf:
       masquerade: true
     enableIPv4Masquerade: true
+    # BPF host routing skips pod netfilter, so ztunnel never SNATs kubelet
+    # probes off 169.254.7.127 and NetworkPolicy drops them as world.
+    enableHostLegacyRouting: true
     l7Proxy: false
     envoy:
       enabled: false
