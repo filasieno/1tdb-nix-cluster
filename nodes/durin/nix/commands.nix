@@ -32,8 +32,8 @@ let
   };
 
   ciliumChart = pkgs.fetchurl {
-    url = "https://helm.cilium.io/cilium-1.20.2.tgz";
-    hash = "sha256-sq/Ye391+HX5KhRVnxT1m3uru0edlo4/1iWiC/MOwg4=";
+    url = "https://helm.cilium.io/cilium-1.20.4.tgz";
+    hash = "sha256-UFq/+DhYEd8alJd2/ELp8QaXmJozKsyG1uiTPvy4Ve0=";
   };
   # kube-proxy is not installed. Cilium owns ClusterIP, NodePort, and masquerade.
   # The Istio-facing knobs stay on even though Flux installs Istio later:
