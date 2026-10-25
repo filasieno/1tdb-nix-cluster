@@ -59,10 +59,11 @@ let
       exclusive: false
     bpf:
       masquerade: true
+      # Cilium 1.20 writes enable-host-legacy-routing from this key. BPF host
+      # routing skips pod netfilter, so ztunnel never SNATs kubelet probes off
+      # 169.254.7.127 and NetworkPolicy drops them as world.
+      hostLegacyRouting: true
     enableIPv4Masquerade: true
-    # BPF host routing skips pod netfilter, so ztunnel never SNATs kubelet
-    # probes off 169.254.7.127 and NetworkPolicy drops them as world.
-    enableHostLegacyRouting: true
     l7Proxy: false
     envoy:
       enabled: false
